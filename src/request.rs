@@ -2,6 +2,7 @@ use std::fmt;
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::convert::TryFrom;
+use std::str::FromStr;
 use url::{Url, Position};
 use async_std::io::{Read, Write};
 use async_uninet::{SocketAddr, Stream};
@@ -37,10 +38,7 @@ impl Request {
         U: Into<String>,
     {
         let mut req = Request::default();
-        req.set_url(match Url::parse(&url.into()) {
-            Ok(url) => url,
-            Err(_) => return Err(Error::InvalidUrl),
-        });
+        req.set_url_str(url.into())?;
         Ok(req)
     }
 
@@ -128,13 +126,37 @@ impl Request {
     pub fn set_url(&mut self, value: Url) {
         self.url = value;
     }
-    
+
+    pub fn set_url_str<V: Into<String>>(&mut self, value: V) -> Result<(), Error> {
+        self.url = match Url::parse(&value.into()) {
+            Ok(url) => url,
+            Err(_) => return Err(Error::InvalidUrl),
+        };
+        Ok(())
+    }
+
     pub fn set_method(&mut self, value: Method) {
         self.method = value;
     }
 
+    pub fn set_method_str(&mut self, value: &str) -> Result<(), Error> {
+        self.method = match Method::from_str(value) {
+            Ok(method) => method,
+            Err(e) => return Err(Error::try_from(e).unwrap()),
+        };
+        Ok(())
+    }
+
     pub fn set_version(&mut self, value: Version) {
         self.version = value;
+    }
+
+    pub fn set_version_str(&mut self, value: &str) -> Result<(), Error> {
+        self.version = match Version::from_str(value) {
+            Ok(version) => version,
+            Err(e) => return Err(Error::try_from(e).unwrap()),
+        };
+        Ok(())
     }
 
     pub fn set_header<N: Into<String>, V: Into<String>>(&mut self, name: N, value: V) {

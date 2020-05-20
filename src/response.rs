@@ -3,6 +3,7 @@ use std::pin::Pin;
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::convert::TryFrom;
+use std::str::FromStr;
 use async_std::io::{Read};
 use async_httplib::{Status, Version, read_exact, read_chunks};
 use crate::{Error, read_content_length, read_transfer_encoding};
@@ -94,8 +95,24 @@ impl<'a> Response<'a> {
         self.status = value;
     }
 
+    pub fn set_status_str(&mut self, value: &str) -> Result<(), Error> {
+        self.status = match Status::from_str(value) {
+            Ok(status) => status,
+            Err(e) => return Err(Error::try_from(e).unwrap()),
+        };
+        Ok(())
+    }
+
     pub fn set_version(&mut self, value: Version) {
         self.version = value;
+    }
+
+    pub fn set_version_str(&mut self, value: &str) -> Result<(), Error> {
+        self.version = match Version::from_str(value) {
+            Ok(version) => version,
+            Err(e) => return Err(Error::try_from(e).unwrap()),
+        };
+        Ok(())
     }
 
     pub fn set_header<N: Into<String>, V: Into<String>>(&mut self, name: N, value: V) {
