@@ -7,7 +7,7 @@ use url::{Url, Position};
 use async_std::io::{Read, Write};
 use async_uninet::{SocketAddr, Stream};
 use async_httplib::{read_first_line, parse_version, parse_status, read_header,
-    write_all, flush_write, write_exact, write_chunks};
+    write_slice, write_all, write_exact, write_chunks, flush_write};
 use crate::{Method, Version, Response, Error, read_content_length};
 
 #[derive(Debug)]
@@ -107,11 +107,11 @@ impl Request {
         &mut self.headers
     }
 
-    pub fn has_method(&mut self, value: Method) -> bool {
+    pub fn has_method(&self, value: Method) -> bool {
         self.method == value
     }
 
-    pub fn has_version(&mut self, value: Version) -> bool {
+    pub fn has_version(&self, value: Version) -> bool {
         self.version == value
     }
 
@@ -203,6 +203,8 @@ impl Request {
     }
 
     pub async fn send<'a>(&mut self) -> Result<Response<'a>, Error> {
+        self.update_host_header();
+
         match self.scheme() {
             "http" => self.send_http(&mut "".as_bytes()).await,
             "https" => self.send_https(&mut "".as_bytes()).await,
@@ -214,6 +216,9 @@ impl Request {
         where
         R: Read + Unpin,
     {
+        self.update_host_header();
+        self.update_body_headers();
+        
         match self.scheme() {
             "http" => self.send_http(body).await,
             "https" => self.send_https(body).await,
@@ -226,8 +231,7 @@ impl Request {
         R: Read + Unpin
     {
         let mut stream = self.build_conn().await?;
-        self.update_headers();
-        self.write_headers(&mut stream).await?;
+        self.write_proto(&mut stream).await?;
         self.write_body(&mut stream, body).await?;
         self.build_response(stream).await
     }
@@ -241,27 +245,28 @@ impl Request {
             Ok(stream) => stream,
             Err(_) => return Err(Error::UnableToConnect),
         };
-        self.update_headers();
-        self.write_headers(&mut stream).await?;
+        self.write_proto(&mut stream).await?;
         self.write_body(&mut stream, body).await?;
         self.build_response(stream).await
     }
 
-    fn update_headers(&mut self) {
-        if self.version == Version::Http0_9 {
-            self.clear_headers();
-        } else if self.version >= Version::Http1_1 && !self.has_header("Host") {
+    fn update_host_header(&mut self) {
+        if self.version >= Version::Http1_1 && !self.has_header("Host") {
             self.set_header("Host", self.host_with_port());
-        } else if self.method.has_body() && !self.has_header("Content-Length") {
+        }
+    }
+
+    fn update_body_headers(&mut self) {
+        if self.version >= Version::Http0_9 && self.method.has_body() && !self.has_header("Content-Length") {
             self.set_header("Transfer-Encoding", "chunked");
         }
     }
 
-    async fn write_headers<S>(&self, stream: &mut S) -> Result<(), Error>
+    async fn write_proto<S>(&self, stream: &mut S) -> Result<(), Error>
         where
         S: Write + Unpin,
     {
-        match write_all(stream, self.to_string().as_bytes()).await {
+        match write_slice(stream, self.to_string().as_bytes()).await {
             Ok(_) => (),
             Err(e) => return Err(Error::try_from(e).unwrap()),
         };
@@ -278,12 +283,17 @@ impl Request {
         S: Write + Unpin,
         R: Read + Unpin,
     {
-        if self.has_header("Content-Length") {
+        if self.has_version(Version::Http0_9) {
+            match write_all(stream, body, self.body_limit).await {
+                Ok(_) => (),
+                Err(e) => return Err(Error::try_from(e).unwrap()),
+            };
+        } else if self.has_header("Content-Length") { // exact
             match write_exact(stream, body, read_content_length(&self.headers, self.body_limit)?).await {
                 Ok(_) => (),
                 Err(e) => return Err(Error::try_from(e).unwrap()),
             };
-        } else {
+        } else { // chunked
             match write_chunks(stream, body, (Some(1024), self.body_limit)).await {
                 Ok(_) => (),
                 Err(e) => return Err(Error::try_from(e).unwrap()),

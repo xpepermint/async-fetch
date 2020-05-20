@@ -162,7 +162,7 @@ impl<'a> Response<'a> {
                 Ok(_) => (),
                 Err(e) => return Err(Error::try_from(e).unwrap()),
             };
-        } else {
+        } else if self.has_header("Content-Length") {
             let length = read_content_length(&self.headers, self.body_limit)?;
             match read_exact(&mut self.reader, &mut data, length).await {
                 Ok(_) => (),
