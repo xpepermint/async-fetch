@@ -184,7 +184,10 @@ impl<'a> Response<'a> {
 
     #[cfg(feature = "json")]
     pub async fn recv_json(&mut self) -> Result<serde_json::Value, Error> {
-        let data = self.recv().await?;
+        let mut data = self.recv().await?;
+        if data.is_empty() {
+            data = "{}".as_bytes().to_vec();
+        }
         let json: serde_json::Value = match serde_json::from_slice(&data) {
             Ok(json) => json,
             Err(_) => return Err(Error::InvalidData),
