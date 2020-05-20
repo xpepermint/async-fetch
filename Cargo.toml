@@ -2,7 +2,7 @@
 name = "async-fetch"
 description = "Asynchronous HTTP client."
 license = "MIT"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Kristijan Sedlak <xpepermint@gmail.com>"]
 edition = "2018"
 documentation = "https://github.com/xpepermint/async-fetch"

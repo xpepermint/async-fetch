@@ -231,8 +231,7 @@ impl Request {
         R: Read + Unpin
     {
         let mut stream = self.build_conn().await?;
-        self.write_proto(&mut stream).await?;
-        self.write_body(&mut stream, body).await?;
+        self.write_request(&mut stream, body).await?;
         self.build_response(stream).await
     }
 
@@ -245,8 +244,7 @@ impl Request {
             Ok(stream) => stream,
             Err(_) => return Err(Error::UnableToConnect),
         };
-        self.write_proto(&mut stream).await?;
-        self.write_body(&mut stream, body).await?;
+        self.write_request(&mut stream, body).await?;
         self.build_response(stream).await
     }
 
@@ -260,6 +258,15 @@ impl Request {
         if self.version >= Version::Http0_9 && self.method.has_body() && !self.has_header("Content-Length") {
             self.set_header("Transfer-Encoding", "chunked");
         }
+    }
+
+    async fn write_request<S, R>(&self, stream: &mut S, body: &mut R) -> Result<(), Error>
+        where
+        S: Write + Unpin,
+        R: Read + Unpin,
+    {
+        self.write_proto(stream).await?;
+        self.write_body(stream, body).await
     }
 
     async fn write_proto<S>(&self, stream: &mut S) -> Result<(), Error>
