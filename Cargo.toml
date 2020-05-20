@@ -2,7 +2,7 @@
 name = "async-fetch"
 description = "Asynchronous HTTP client."
 license = "MIT"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Kristijan Sedlak <xpepermint@gmail.com>"]
 edition = "2018"
 documentation = "https://github.com/xpepermint/async-fetch"
@@ -10,12 +10,18 @@ homepage = "https://github.com/xpepermint/async-fetch"
 repository = "https://github.com/xpepermint/async-fetch"
 readme = "README.md"
 
+[features]
+default = []
+json = ["serde", "serde_json"]
+
 [dependencies]
 async-std = "^1.5.0"
 async-uninet = "^0.1.1"
 async-httplib = "^0.2.1"
 async-native-tls = "^0.3.3"
 url = "^2.1.1" 
+serde = { version = "^1.0.110", optional = true }
+serde_json = { version = "^1.0.53", optional = true }
 
 [dev-dependencies]
 async-std = { version = "^1.5.0", features = ["attributes"] }

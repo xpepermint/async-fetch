@@ -8,6 +8,7 @@ pub enum Error {
     InvalidStatus,
     InvalidInput,
     InvalidHeader,
+    InvalidData,
     UnableToConnect,
     UnableToRead,
     UnableToWrite,

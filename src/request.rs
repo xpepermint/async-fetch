@@ -212,7 +212,7 @@ impl Request {
         }
     }
 
-    pub async fn send_data<'a, R>(&mut self, body: &mut R) -> Result<Response<'a>, Error>
+    pub async fn send_stream<'a, R>(&mut self, body: &mut R) -> Result<Response<'a>, Error>
         where
         R: Read + Unpin,
     {
@@ -224,6 +224,23 @@ impl Request {
             "https" => self.send_https(body).await,
             _ => Err(Error::InvalidUrl),
         }
+    }
+
+    pub async fn send_slice<'a>(&mut self, body: &[u8]) -> Result<Response<'a>, Error> {
+        self.set_header("Content-Length", body.len().to_string());
+        self.send_stream(&mut body.clone()).await
+    }
+
+    pub async fn send_str<'a>(&mut self, body: &str) -> Result<Response<'a>, Error> {
+        self.set_header("Content-Length", body.len().to_string());
+        self.send_stream(&mut body.as_bytes()).await
+    }
+
+    #[cfg(feature = "json")]
+    pub async fn send_json<'a>(&mut self, body: &serde_json::Value) -> Result<Response<'a>, Error> {
+        let body = body.to_string();
+        self.set_header("Content-Length", body.len().to_string());
+        self.send_stream(&mut body.as_bytes()).await
     }
 
     pub async fn send_http<'a, R>(&mut self, body: &mut R) -> Result<Response<'a>, Error>

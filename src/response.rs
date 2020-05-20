@@ -172,6 +172,25 @@ impl<'a> Response<'a> {
 
         Ok(data)
     }
+
+    pub async fn recv_string(&mut self) -> Result<String, Error> {
+        let data = self.recv().await?;
+        let txt = match String::from_utf8(data) {
+            Ok(txt) => txt,
+            Err(_) => return Err(Error::InvalidData),
+        };
+        Ok(txt)
+    }
+
+    #[cfg(feature = "json")]
+    pub async fn recv_json(&mut self) -> Result<serde_json::Value, Error> {
+        let data = self.recv().await?;
+        let json: serde_json::Value = match serde_json::from_slice(&data) {
+            Ok(json) => json,
+            Err(_) => return Err(Error::InvalidData),
+        };
+        Ok(json)
+    }
 }
 
 impl fmt::Display for Response<'_> {

@@ -9,9 +9,12 @@ This crate provides a simple HTTP client and is built on top of [async-std](http
 **Example:**
 
 ```rs
-async_fetch::Request;
+async_fetch::{Method, Request};
 
+// request
 let mut req = Request::parse_url("https://domain.com").unwrap();
+req.set_method(Method::Post);
+// response
 let mut res = req.send().await?;
-let data = res.recv().await?;
+let data = res.recv().await.unwrap();
 ```
