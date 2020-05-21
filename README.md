@@ -18,3 +18,8 @@ req.set_method(Method::Post);
 let mut res = req.send().await?;
 let data = res.recv().await.unwrap();
 ```
+
+**Todo:**
+
+* Handle redirects
+* Add retry logic

@@ -139,7 +139,7 @@ impl<'a> Response<'a> {
     pub fn to_proto_string(&self) -> String {
         let mut output = String::new();
         if !self.has_version(Version::Http0_9) {
-            output.push_str(&format!("{} {} {}\r\n", self.version, self.status, self.status.canonical_reason()));
+            output.push_str(&format!("{} {} {}\r\n", self.version, self.status, self.status.reason()));
 
             for (name, value) in self.headers.iter() {
                 output.push_str(&format!("{}: {}\r\n", name, value));
