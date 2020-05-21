@@ -202,7 +202,7 @@ impl Request {
         match self.scheme() {
             "http" => self.send_http(&mut "".as_bytes()).await,
             "https" => self.send_https(&mut "".as_bytes()).await,
-            s => Err(Error::new(ErrorKind::InvalidInput, format!("The URL scheme {} is invalid.", s))),
+            s => Err(Error::new(ErrorKind::InvalidInput, format!("The URL scheme `{}` is invalid.", s))),
         }
     }
 
@@ -216,7 +216,7 @@ impl Request {
         match self.scheme() {
             "http" => self.send_http(body).await,
             "https" => self.send_https(body).await,
-            s => Err(Error::new(ErrorKind::InvalidInput, format!("The URL scheme {} is invalid.", s))),
+            s => Err(Error::new(ErrorKind::InvalidInput, format!("The URL scheme `{}` is invalid.", s))),
         }
     }
 
@@ -310,7 +310,7 @@ impl Request {
 
         match SocketAddr::from_str(&addr).await {
             Ok(addr) => Stream::connect(&addr).await,
-            Err(_) => Err(Error::new(ErrorKind::AddrNotAvailable, format!("The address {} is invalid.", addr))),
+            Err(_) => Err(Error::new(ErrorKind::AddrNotAvailable, format!("The address `{}` is invalid.", addr))),
         }
     }
 
@@ -336,11 +336,11 @@ impl Request {
             res.set_header(
                 match String::from_utf8(name) {
                     Ok(name) => name,
-                    Err(_) => return Err(Error::new(ErrorKind::InvalidData, format!("The response header is invalid (#{}).", res.headers().len()))),
+                    Err(_) => return Err(Error::new(ErrorKind::InvalidData, format!("The response header `#{}` is invalid.", res.headers().len()))),
                 },
                 match String::from_utf8(value) {
                     Ok(value) => value,
-                    Err(_) => return Err(Error::new(ErrorKind::InvalidData, format!("The response header is invalid (#{}).", res.headers().len()))),
+                    Err(_) => return Err(Error::new(ErrorKind::InvalidData, format!("The response header `#{}` is invalid.", res.headers().len()))),
                 },
             );
         }
