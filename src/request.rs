@@ -1,14 +1,14 @@
 use std::fmt;
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
-use std::convert::TryFrom;
+use std::io::{Error, ErrorKind};
 use std::str::FromStr;
 use url::{Url, Position};
 use async_std::io::{Read, Write};
 use async_uninet::{SocketAddr, Stream};
-use async_httplib::{read_first_line, parse_version, parse_status, read_header,
+use async_httplib::{read_first_line, parse_version, parse_status, read_header_line,
     write_slice, write_all, write_exact, write_chunks, flush_write};
-use crate::{Method, Version, Response, Error, read_content_length};
+use crate::{Method, Version, Response, read_content_length};
 
 #[derive(Debug)]
 pub struct Request {
@@ -130,7 +130,7 @@ impl Request {
     pub fn set_url_str<V: Into<String>>(&mut self, value: V) -> Result<(), Error> {
         self.url = match Url::parse(&value.into()) {
             Ok(url) => url,
-            Err(_) => return Err(Error::InvalidUrl),
+            Err(e) => return Err(Error::new(ErrorKind::InvalidInput, e.to_string())),
         };
         Ok(())
     }
@@ -140,10 +140,7 @@ impl Request {
     }
 
     pub fn set_method_str(&mut self, value: &str) -> Result<(), Error> {
-        self.method = match Method::from_str(value) {
-            Ok(method) => method,
-            Err(e) => return Err(Error::try_from(e).unwrap()),
-        };
+        self.method = Method::from_str(value)?;
         Ok(())
     }
 
@@ -152,10 +149,7 @@ impl Request {
     }
 
     pub fn set_version_str(&mut self, value: &str) -> Result<(), Error> {
-        self.version = match Version::from_str(value) {
-            Ok(version) => version,
-            Err(e) => return Err(Error::try_from(e).unwrap()),
-        };
+        self.version = Version::from_str(value)?;
         Ok(())
     }
 
@@ -208,7 +202,7 @@ impl Request {
         match self.scheme() {
             "http" => self.send_http(&mut "".as_bytes()).await,
             "https" => self.send_https(&mut "".as_bytes()).await,
-            _ => Err(Error::InvalidUrl),
+            s => Err(Error::new(ErrorKind::InvalidInput, format!("The URL scheme {} is invalid.", s))),
         }
     }
 
@@ -222,7 +216,7 @@ impl Request {
         match self.scheme() {
             "http" => self.send_http(body).await,
             "https" => self.send_https(body).await,
-            _ => Err(Error::InvalidUrl),
+            s => Err(Error::new(ErrorKind::InvalidInput, format!("The URL scheme {} is invalid.", s))),
         }
     }
 
@@ -257,10 +251,12 @@ impl Request {
         R: Read + Unpin
     {
         let stream = self.build_conn().await?;
+
         let mut stream = match async_native_tls::connect(self.host(), stream).await {
             Ok(stream) => stream,
-            Err(_) => return Err(Error::UnableToConnect),
+            Err(e) => return Err(Error::new(ErrorKind::Interrupted, e.to_string())),
         };
+
         self.write_request(&mut stream, body).await?;
         self.build_response(stream).await
     }
@@ -290,16 +286,8 @@ impl Request {
         where
         S: Write + Unpin,
     {
-        match write_slice(stream, self.to_string().as_bytes()).await {
-            Ok(_) => (),
-            Err(e) => return Err(Error::try_from(e).unwrap()),
-        };
-        match flush_write(stream).await {
-            Ok(_) => (),
-            Err(e) => return Err(Error::try_from(e).unwrap()),
-        };
-
-        Ok(())
+        write_slice(stream, self.to_string().as_bytes()).await?;
+        flush_write(stream).await
     }
 
     async fn write_body<S, R>(&self, stream: &mut S, body: &mut R) -> Result<(), Error>
@@ -308,37 +296,22 @@ impl Request {
         R: Read + Unpin,
     {
         if self.has_version(Version::Http0_9) {
-            match write_all(stream, body, self.body_limit).await {
-                Ok(_) => (),
-                Err(e) => return Err(Error::try_from(e).unwrap()),
-            };
+            write_all(stream, body, self.body_limit).await?;
         } else if self.has_header("Content-Length") { // exact
-            match write_exact(stream, body, read_content_length(&self.headers, self.body_limit)?).await {
-                Ok(_) => (),
-                Err(e) => return Err(Error::try_from(e).unwrap()),
-            };
+            write_exact(stream, body, read_content_length(&self.headers, self.body_limit)?).await?;
         } else { // chunked
-            match write_chunks(stream, body, (Some(1024), self.body_limit)).await {
-                Ok(_) => (),
-                Err(e) => return Err(Error::try_from(e).unwrap()),
-            };
+            write_chunks(stream, body, (Some(1024), self.body_limit)).await?;
         }
-        match flush_write(stream).await {
-            Ok(_) => Ok(()),
-            Err(e) => return Err(Error::try_from(e).unwrap()),
-        }
+        flush_write(stream).await
     }
 
     async fn build_conn(&mut self) -> Result<Stream, Error> {
-        let addr = match SocketAddr::from_str(self.socket_address()).await {
-            Ok(addr) => addr,
-            Err(_) => return Err(Error::UnableToConnect),
-        };
-        let stream = match Stream::connect(&addr).await {
-            Ok(stream) => stream,
-            Err(_) => return Err(Error::UnableToConnect),
-        };
-        Ok(stream)
+        let addr = self.socket_address();
+
+        match SocketAddr::from_str(&addr).await {
+            Ok(addr) => Stream::connect(&addr).await,
+            Err(_) => Err(Error::new(ErrorKind::AddrNotAvailable, format!("The address {} is invalid.", addr))),
+        }
     }
 
     async fn build_response<'a, S>(&mut self, mut stream: S) -> Result<Response<'a>, Error>
@@ -348,43 +321,31 @@ impl Request {
         let mut res: Response<'a> = Response::default();
 
         let (mut version, mut status, mut message) = (vec![], vec![], vec![]);
-        match read_first_line(&mut stream, (&mut version, &mut status, &mut message), None).await {
-            Ok(_) => (),
-            Err(e) => return Err(Error::try_from(e).unwrap()),
-        };
-        res.set_version(match parse_version(version) {
-            Ok(version) => version,
-            Err(e) => return Err(Error::try_from(e).unwrap()),
-        });
-        res.set_status(match parse_status(status) {
-            Ok(status) => status,
-            Err(e) => return Err(Error::try_from(e).unwrap()),
-        });
+        read_first_line(&mut stream, (&mut version, &mut status, &mut message), None).await?;
+        res.set_version(parse_version(version)?);
+        res.set_status(parse_status(status)?);
     
         loop {
             let (mut name, mut value) = (vec![], vec![]);
-            match read_header(&mut stream, (&mut name, &mut value), None).await {
-                Ok(_) => match !name.is_empty() {
-                    true => {
-                        res.set_header(
-                            match String::from_utf8(name) {
-                                Ok(name) => name,
-                                Err(_) => return Err(Error::InvalidHeader),
-                            },
-                            match String::from_utf8(value) {
-                                Ok(value) => value,
-                                Err(_) => return Err(Error::InvalidHeader),
-                            },
-                        );
-                    },
-                    false => break,
+            read_header_line(&mut stream, (&mut name, &mut value), None).await?;
+            
+            if name.is_empty() {
+                break;
+            }
+
+            res.set_header(
+                match String::from_utf8(name) {
+                    Ok(name) => name,
+                    Err(_) => return Err(Error::new(ErrorKind::InvalidData, format!("The response header is invalid (#{}).", res.headers().len()))),
                 },
-                Err(e) => return Err(Error::try_from(e).unwrap()),
-            };
+                match String::from_utf8(value) {
+                    Ok(value) => value,
+                    Err(_) => return Err(Error::new(ErrorKind::InvalidData, format!("The response header is invalid (#{}).", res.headers().len()))),
+                },
+            );
         }
 
         res.set_reader(stream);
-
         Ok(res)
     }
 }

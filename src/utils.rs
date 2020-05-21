@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::{Error};
+use std::io::{Error, ErrorKind};
 
 pub fn read_transfer_encoding(headers: &HashMap<String, String>) -> &str {
     match headers.get("Transfer-Encoding") {
@@ -14,12 +14,12 @@ pub fn read_content_length(headers: &HashMap<String, String>, limit: Option<usiz
             Ok(length) => match limit {
                 Some(limit) => match limit >= length {
                     true => Ok(length),
-                    false => Err(Error::LimitExceeded),
+                    false => Err(Error::new(ErrorKind::InvalidData, "The operation hit the limit of {} bytes while reading the HTTP body chunk data.")),
                 },
                 None => Ok(length),
             },
-            Err(_) => Err(Error::InvalidInput),
+            Err(e) => Err(Error::new(ErrorKind::InvalidData, e.to_string())),
         },
-        None => Err(Error::InvalidHeader),
+        None => Err(Error::new(ErrorKind::InvalidData, "The header `Content-Length` cannot found.")),
     }
 }

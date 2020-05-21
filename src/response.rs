@@ -2,11 +2,11 @@ use std::fmt;
 use std::pin::Pin;
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
-use std::convert::TryFrom;
+use std::io::{Error, ErrorKind};
 use std::str::FromStr;
 use async_std::io::{Read};
 use async_httplib::{Status, Version, read_exact, read_chunks};
-use crate::{Error, read_content_length, read_transfer_encoding};
+use crate::{read_content_length, read_transfer_encoding};
 
 pub struct Response<'a> {
     status: Status,
@@ -96,10 +96,7 @@ impl<'a> Response<'a> {
     }
 
     pub fn set_status_str(&mut self, value: &str) -> Result<(), Error> {
-        self.status = match Status::from_str(value) {
-            Ok(status) => status,
-            Err(e) => return Err(Error::try_from(e).unwrap()),
-        };
+        self.status = Status::from_str(value)?;
         Ok(())
     }
 
@@ -108,10 +105,7 @@ impl<'a> Response<'a> {
     }
 
     pub fn set_version_str(&mut self, value: &str) -> Result<(), Error> {
-        self.version = match Version::from_str(value) {
-            Ok(version) => version,
-            Err(e) => return Err(Error::try_from(e).unwrap()),
-        };
+        self.version = Version::from_str(value)?;
         Ok(())
     }
 
@@ -146,9 +140,11 @@ impl<'a> Response<'a> {
         let mut output = String::new();
         if !self.has_version(Version::Http0_9) {
             output.push_str(&format!("{} {} {}\r\n", self.version, self.status, self.status.canonical_reason()));
+
             for (name, value) in self.headers.iter() {
                 output.push_str(&format!("{}: {}\r\n", name, value));
             }
+
             output.push_str("\r\n");
         }
         output
@@ -158,16 +154,10 @@ impl<'a> Response<'a> {
         let mut data = Vec::new();
 
         if read_transfer_encoding(&self.headers) == "chunked" {
-            match read_chunks(&mut self.reader, &mut data, (self.chunkline_limit, self.body_limit)).await {
-                Ok(_) => (),
-                Err(e) => return Err(Error::try_from(e).unwrap()),
-            };
+            read_chunks(&mut self.reader, &mut data, (self.chunkline_limit, self.body_limit)).await?;
         } else if self.has_header("Content-Length") {
             let length = read_content_length(&self.headers, self.body_limit)?;
-            match read_exact(&mut self.reader, &mut data, length).await {
-                Ok(_) => (),
-                Err(e) => return Err(Error::try_from(e).unwrap()),
-            };
+            read_exact(&mut self.reader, &mut data, length).await?;
         }
 
         Ok(data)
@@ -177,7 +167,7 @@ impl<'a> Response<'a> {
         let data = self.recv().await?;
         let txt = match String::from_utf8(data) {
             Ok(txt) => txt,
-            Err(_) => return Err(Error::InvalidData),
+            Err(e) => return Err(Error::new(ErrorKind::InvalidData, e.to_string())),
         };
         Ok(txt)
     }
@@ -190,7 +180,7 @@ impl<'a> Response<'a> {
         }
         let json: serde_json::Value = match serde_json::from_slice(&data) {
             Ok(json) => json,
-            Err(_) => return Err(Error::InvalidData),
+            Err(e) => return Err(Error::new(ErrorKind::InvalidData, e.to_string())),
         };
         Ok(json)
     }
