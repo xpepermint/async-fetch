@@ -208,7 +208,7 @@ impl Request {
 
     pub async fn send_stream<'a, R>(&mut self, body: &mut R) -> Result<Response<'a>, Error>
         where
-        R: Read + Unpin,
+        R: Read + Send + Unpin,
     {
         self.update_host_header();
         self.update_body_headers();
@@ -239,7 +239,7 @@ impl Request {
 
     pub async fn send_http<'a, R>(&mut self, body: &mut R) -> Result<Response<'a>, Error>
         where
-        R: Read + Unpin
+        R: Read + Send + Unpin,
     {
         let mut stream = self.build_conn().await?;
         self.write_request(&mut stream, body).await?;
@@ -248,7 +248,7 @@ impl Request {
 
     pub async fn send_https<'a, R>(&mut self, body: &mut R) -> Result<Response<'a>, Error>
         where
-        R: Read + Unpin
+        R: Read + Send + Unpin,
     {
         let stream = self.build_conn().await?;
 
@@ -276,7 +276,7 @@ impl Request {
     async fn write_request<S, R>(&self, stream: &mut S, body: &mut R) -> Result<(), Error>
         where
         S: Write + Unpin,
-        R: Read + Unpin,
+        R: Read + Send + Unpin,
     {
         self.write_proto(stream).await?;
         self.write_body(stream, body).await
@@ -293,7 +293,7 @@ impl Request {
     async fn write_body<S, R>(&self, stream: &mut S, body: &mut R) -> Result<(), Error>
         where
         S: Write + Unpin,
-        R: Read + Unpin,
+        R: Read + Send + Unpin,
     {
         if self.has_version(Version::Http0_9) {
             write_all(stream, body, self.body_limit).await?;
@@ -316,7 +316,7 @@ impl Request {
 
     async fn build_response<'a, S>(&mut self, mut stream: S) -> Result<Response<'a>, Error>
         where
-        S: Read + Unpin + 'a,
+        S: Read + Send + Unpin + 'a,
     {
         let mut res: Response<'a> = Response::default();
 

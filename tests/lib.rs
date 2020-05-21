@@ -1,3 +1,4 @@
+use async_std::task;
 use async_fetch::{Request, Method, Status, Version};
 
 #[async_std::test]
@@ -27,4 +28,13 @@ async fn performs_post_request() {
     let name = data.get("data").unwrap().get("name").unwrap();
     let name: String = serde_json::from_str(&name.to_string()).unwrap();
     assert_eq!(name, "John");
+}
+
+#[async_std::test]
+async fn respects_spawning() {
+    task::spawn(async move {
+        let mut req = Request::parse_url("https://jsonplaceholder.typicode.com/todos/1").unwrap();
+        let res = req.send().await.unwrap();
+        assert_eq!(*res.status(), Status::Ok);
+    });   
 }

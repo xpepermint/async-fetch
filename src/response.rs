@@ -12,7 +12,7 @@ pub struct Response<'a> {
     status: Status,
     version: Version,
     headers: HashMap<String, String>,
-    reader: Pin<Box<dyn Read + Unpin + 'a>>,
+    reader: Pin<Box<dyn Read + Send + Unpin + 'a>>,
     chunkline_limit: Option<usize>,
     body_limit: Option<usize>,
 }
@@ -32,7 +32,7 @@ impl<'a> Response<'a> {
 
     pub fn with_reader<R>(reader: R) -> Self
         where
-        R: Read + Unpin + 'a,
+        R: Read + Send + Unpin + 'a,
     {
         let mut res = Self::default();
         res.set_reader(reader);
@@ -55,7 +55,7 @@ impl<'a> Response<'a> {
         self.headers.get(&name.into())
     }
 
-    pub fn reader(&self) -> &Pin<Box<dyn Read + Unpin + 'a>> {
+    pub fn reader(&self) -> &Pin<Box<dyn Read + Send + Unpin + 'a>> {
         &self.reader
     }
 
@@ -115,7 +115,7 @@ impl<'a> Response<'a> {
 
     pub fn set_reader<R>(&mut self, reader: R)
         where
-        R: Read + Unpin + 'a,
+        R: Read + Send + Unpin + 'a,
     {
         self.reader = Box::pin(reader);
     }
